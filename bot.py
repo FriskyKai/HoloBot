@@ -1,4 +1,6 @@
+import os
 import telebot
+import logging
 from validators import *  # модуль для валидации
 from speechkit import *  # модуль для работы с SpeechKit
 from yandex_gpt import ask_gpt  # модуль для работы с GPT
@@ -7,12 +9,88 @@ from config import TOKEN, LOGS, COUNT_LAST_MSG
 # подтягиваем функции из database файла
 from database import create_database, add_message, select_n_last_messages
 
+# настраиваем запись логов в файл
+logging.basicConfig(filename=LOGS, level=logging.ERROR, format="%(asctime)s FILE: %(filename)s IN: %(funcName)s MESSAGE: %(message)s", filemode="w")
+logging.basicConfig(filename=LOGS, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 bot = telebot.TeleBot(TOKEN)
 
 
 def main():
-    # обрабатываем текстовые сообщения
+    # Тестовая команда /stt
+    @bot.message_handler(commands=['stt'])
+    def stt_handler(message):
+        logging.info('INFO: Вызван метод stt...')
+        user_id = message.from_user.id
+        bot.send_message(user_id, 'Отправь голосовое сообщение, чтобы я его распознал!')
+        bot.register_next_step_handler(message, stt)
+
+    def stt(message):
+        user_id = message.from_user.id
+
+        if not message.voice:
+            return
+
+        file_id = message.voice.file_id
+        file_info = bot.get_file(file_id)
+        file = bot.download_file(file_info.file_path)
+
+        bot.send_message(user_id, 'Активно пишу...')
+
+        status, text = speech_to_text(file)
+
+        if status:
+            bot.send_message(user_id, text, reply_to_message_id=message.id)
+        else:
+            bot.send_message(user_id, text)
+
+    # Тестовая команда /tts
+    @bot.message_handler(commands=['tts'])
+    def tts_handler(message):
+        logging.info('INFO: Вызван метод tts...')
+        user_id = message.from_user.id
+        bot.send_message(user_id, 'Отправь текстовое сообщение, чтобы я его озвучил!')
+        bot.register_next_step_handler(message, tts)
+
+    def tts(message):
+        user_id = message.from_user.id
+        text = message.text
+
+        if message.content_type != 'text':
+            bot.send_message(user_id, 'Отправь текстовое сообщение')
+            return
+
+        bot.send_message(user_id, 'Озвучиваю...')
+
+        status, content = text_to_speech(text)
+
+        if status:
+            bot.send_voice(user_id, content)
+        else:
+            bot.send_message(user_id, content)
+
+    # Команда /debug
+    @bot.message_handler(commands=['debug'])
+    def debug(message):
+        try:
+            filepath = 'logs.txt'
+
+            # Проверяем существование файла и его размер
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                # Отправляем файл как документ
+                with open(filepath, 'rb') as f:
+                    bot.send_document(message.chat.id, f)
+            else:
+                # Файл пустой или не найден, отправляем сообщение
+                if os.path.exists(filepath):
+                    bot.send_message(message.chat.id, 'Файл logs.txt пустой.')
+                else:
+                    bot.send_message(message.chat.id, 'Файл logs.txt не найден.')
+        except Exception as e:
+            bot.send_message(message.chat.id, f'Произошла ошибка: {str(e)}')
+
+    # Текстовые сообщения
     @bot.message_handler(content_types=['text'])
     def handle_text(message):
         try:
@@ -59,6 +137,7 @@ def main():
             logging.error(e)  # если ошибка — записываем её в логи
             bot.send_message(message.from_user.id, "Не получилось ответить. Попробуй написать другое сообщение")
 
+    # Голосовые сообщения
     @bot.message_handler(content_types=['voice'])
     def handle_voice(message: telebot.types.Message):
         try:

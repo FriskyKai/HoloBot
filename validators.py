@@ -9,7 +9,8 @@ from yandex_gpt import count_gpt_tokens
 
 # настраиваем запись логов в файл
 logging.basicConfig(filename=LOGS, level=logging.ERROR, format="%(asctime)s FILE: %(filename)s IN: %(funcName)s MESSAGE: %(message)s", filemode="w")
-
+logging.basicConfig(filename=LOGS, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # получаем количество уникальных пользователей, кроме самого пользователя
 def check_number_of_users(user_id):
@@ -30,8 +31,6 @@ def is_gpt_token_limit(messages, total_spent_tokens):
 
 
 # проверяем, не превысил ли пользователь лимиты на преобразование аудио в текст
-from config import MAX_USER_STT_BLOCKS, STT_BLOCK_DURATION
-
 
 def is_stt_block_limit(user_id, duration):
     try:
